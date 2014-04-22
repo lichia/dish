@@ -1,9 +1,14 @@
+
 import os
 
-from logbook import FileHandler
-from logbook.queues import ZeroMQSubscriber
+from cluster_helper.cluster import cluster_view
+
+from logbook import FileHandler, NestedSetup, Logger
+from logbook.queues import ZeroMQSubscriber, ZeroMQHandler
 
 from IPython.utils import localinterfaces
+from IPython.parallel import require
+
 
 class Pipeline(object):
     """Represents the abstraction of a pipeline of jobs to be run
@@ -21,8 +26,12 @@ class Pipeline(object):
         directory that holds all this job's output
 
         resources: a dict that describes the resources to be allocated
-        to commands.  Keys should be names of commands, values should also
-        be dicts, each with two keys: "cores", and "mem".
+        to commands.  Keys should be names of commands, values should
+        also be dicts, each with at least two keys: "cores", and
+        "mem". You can optional also specifiy max_jobs to limit the
+        parallelism at a given stage. This is useful e.g. if you know
+        that something is I/O intensive and will overwhelm the some
+        storage system if too many are run at once.
 
         """
 
@@ -61,13 +70,42 @@ class Pipeline(object):
         self.progress_store = os.path.join(self.workdir, ".progress")
 
         # determine which IP we are going to listen on for logging
-        if not localinterfaces.public_ips():
+        try:
+            self.listen_ip = localinterfaces.public_ips()[0]
+        except:
             raise ValueError("This machine appears not to have"
                              " any publicly visible IP addresses")
-        self.listen_ip = localinterfaces.public_ips()[0]
 
         # setup ZMQ logging
-        handler = FileHandler(os.path.join(self.logdir, "log.txt"))
-        # TODO figure out a reasonable way to determine port
+        handler = FileHandler(os.path.join(self.logdir, "dish.log"))
+        # TODO figure out a reasonable way to choose port
         self.subscriber = ZeroMQSubscriber("tcp://" + self.listen_ip + ":9090")
         self.controller = self.subscriber.dispatch_in_background(handler)
+        self.stages = []
+
+    def wrap(self, f):
+        """ Wrap a callable so that logging is setup correctly before calling it.
+        """
+        @require(NestedSetup, FileHandler, ZeroMQHander, Logger, f, ip=self.listen_ip)
+        def wrapper(job):
+            handler = NestedSetup([
+                ZeroMQHandler('tcp://' + ip + ':9090', level="INFO"),
+                FileHandler(os.path.join(job.workdir, job.description+".log"),
+                            level="DEBUG", bubble=True),
+            ])
+            with handler.applicationbound():
+                logger = Logger(job.description)
+                f(job)
+                return job
+        return wrapper
+
+    def call(self, f, mem=None, cores=None):
+        """Call the function `f`. It will be wrapped for logging and then
+        passed each `job` that it is being called on.
+
+        """
+        wrapped = self.wrap(f)
+        with cluster_view(scheduler=self.scheduler, queue=self.queue,
+                          extra_params={"cores": cores, "mem": mem},
+                          profile=self.ipythondir) as view:
+            self.jobs = view.map_sync(wrapped, jobs)
