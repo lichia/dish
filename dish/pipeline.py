@@ -84,6 +84,15 @@ class Pipeline(object):
                                                ":" + self.listen_port)
         self.controller = self.subscriber.dispatch_in_background(handler)
 
+    def stop(self):
+        """Gracefully shutdown the Pipeline, cleaning up threads, sockets,
+        etc.  Leaves working directory intact so everything can in
+        principle be picked up again where we left off.
+
+        """
+        self.controller.stop()
+        self.subscriber.close()
+
     def _compute_resources(self, cores_per_engine, mem_per_engine):
         if cores_per_engine > self.total_cores:
             raise ValueError("A job requested {0} but only {1}"

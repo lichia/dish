@@ -27,8 +27,7 @@ class TestPipeline(object):
 
     @classmethod
     def teardown_class(cls):
-        cls.p.controller.stop()
-        cls.p.subscriber.close()
+        cls.p.stop()
         shutil.rmtree(cls.workdir)
         shutil.rmtree(cls.tmpdir)
 
