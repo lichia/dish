@@ -4,9 +4,9 @@ import os
 from cluster_helper.cluster import cluster_view
 
 from logbook import FileHandler, Logger
-from dish.logging import ZeroMQPushHandler, ZeroMQPullSubscriber
+from dish.logging.zmqextras import ZeroMQPullSubscriber
 
-from dish.utils import wrapper
+from dish.logging.wrapper import _wrapper
 
 from IPython.utils import localinterfaces
 from IPython.parallel import require, interactive
@@ -19,7 +19,8 @@ class Pipeline(object):
     distributed over machines
     """
 
-    def __init__(self, workdir, jobs, resources, total_cores, scheduler, queue):
+    def __init__(self, workdir, jobs, total_cores, scheduler=None, queue=None,
+                 local=False):
         """Initialize a pipeline.
 
         workdir: directory to use for scratch space and results. this
@@ -29,13 +30,8 @@ class Pipeline(object):
         key for now is "description", which will be used for the
         directory that holds all this job's output
 
-        resources: a dict that describes the resources to be allocated
-        to commands.  Keys should be names of commands, values should
-        also be dicts, each with at least two keys: "cores", and
-        "mem". You can optional also specifiy max_jobs to limit the
-        parallelism at a given stage. This is useful e.g. if you know
-        that something is I/O intensive and will overwhelm the some
-        storage system if too many are run at once.
+        total_cores: the total number of cores you have available for
+        processing
 
         """
 
@@ -43,18 +39,17 @@ class Pipeline(object):
         for job in jobs:
             if type(job) is not dict:
                 raise ValueError("job is not a dict: {}".format(job))
-        for spec in resources:
-            if (type(spec) is not dict or spec.get("mem") is None or spec.get("cores") is None):
-                raise ValueError("resource spec appears malformed: {}".format(spec))
+            if not job.get("description"):
+                raise ValueError("job {} has not description".format(job))
         workdir = os.path.abspath(os.path.expanduser(workdir))
         if not os.path.exists(workdir):
             raise ValueError("workdir: {} appears not to exist".format(workdir))
         self.workdir = workdir
-        self.resources = resources
         self.jobs = jobs
         self.total_cores = total_cores
         self.scheduler = scheduler
         self.queue = queue
+        self.local = local
 
     def start(self):
         """Initialize workdir, logging, etc. in preparation for running jobs.
@@ -84,26 +79,39 @@ class Pipeline(object):
 
         # setup ZMQ logging
         handler = FileHandler(os.path.join(self.logdir, "dish.log"))
-        self.listen_port = str(randint(5000,10000))
+        self.listen_port = str(randint(5000, 10000))
         self.subscriber = ZeroMQPullSubscriber("tcp://" + self.listen_ip +
                                                ":" + self.listen_port)
         self.controller = self.subscriber.dispatch_in_background(handler)
-        self.stages = []
 
-    def call(self, f, mem=None, cores=None):
+    def _compute_resources(self, cores_per_engine, mem_per_engine):
+        if cores_per_engine > self.total_cores:
+            raise ValueError("A job requested {0} but only {1}"
+                             " are available.".format(cores, self.total_cores))
+        num_engines = self.total_cores // cores_per_engine
+        # TODO in the future, should maybe validate that requested cores
+        # and memory are actually going to be availible
+        return num_engines, cores_per_engine, mem_per_engine
+
+    def call(self, f, cores=1, mem=None):
         """Call the function `f`. It will be wrapped for logging and then
         passed each `job` that it is being called on, along with a logger.
 
         """
+        engines, cores, mem = self._compute_resources(cores, mem)
+        extra_params = {"run_local": self.local,
+                        "cores": cores,
+                        "mem": mem}
         with cluster_view(self.scheduler, self.queue,
-                          self.total_cores, profile=self.ipythondir) as view:
+                          engines, profile=self.ipythondir,
+                          extra_params=extra_params) as view:
             # push connection info to engines and import necessary things
-            dview = self.view.client.direct_view()
+            dview = view.client.direct_view()
             dview["ip"] = self.listen_ip
             dview["port"] = self.listen_port
             dview["f"] = f
             with dview.sync_imports():
                 from logbook import NestedSetup, Logger, FileHandler
-                from dish.logging import ZeroMQPushHandler
+                from dish.logging.zmqextras import ZeroMQPushHandler
                 import os
-            self.jobs = view.map_sync(wrapper, self.jobs)
+            self.jobs = view.map_sync(_wrapper, self.jobs)

@@ -1,13 +1,12 @@
 from IPython.parallel import interactive, require
 
-# import dish
-# from dish import logging
-# import logbook
-
 @interactive
-def wrapper(job):
+def _wrapper(job):
     """Wrapper to execute user passed functions remotely after
     setting up logging
+
+    All of the dependancies (NestedSetup, ZeroMQHandler, ip etc.)
+    are loaded by the Pipeline before this is executed.
     """
     handler = NestedSetup([
         ZeroMQPushHandler("tcp://" + ip + ":" + port),
@@ -17,4 +16,5 @@ def wrapper(job):
     logger = Logger(job["description"])
     with handler.applicationbound():
         f(job, logger=logger)
+        # TODO cleanup zmq stuff
         return job

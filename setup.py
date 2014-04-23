@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 setup(
     name="dish",
@@ -8,7 +8,7 @@ setup(
     description="distributed shell",
     license="MIT",
     url="https://github.com/porterjamesj/dish",
-    packages=["dish"],
+    packages=find_packages(),
     install_requires=[
         'ipython-cluster-helper',
         'ipython >= 2.0.0',

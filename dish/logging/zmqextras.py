@@ -1,6 +1,7 @@
 """Enable multiple processes to send logs to a central server through ZeroMQ.
 
 Thanks to Zachary Voase: https://github.com/zacharyvoase/logbook-zmqpush
+
 Slightly modified by Brad Chapman to support Logbook 0.4.1:
 https://github.com/chapmanb/bcbio-nextgen/blob/master/bcbio/log/logbook_zmqpush.py
 """
