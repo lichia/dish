@@ -7,6 +7,7 @@ from logbook import FileHandler, Logger
 from dish.logging.zmqextras import ZeroMQPullSubscriber
 
 from dish.logging.wrapper import _wrapper
+from dish.fsutils import maybe_mkdir
 
 from IPython.utils import localinterfaces
 from IPython.parallel import require, interactive
@@ -60,13 +61,13 @@ class Pipeline(object):
         # make a working directory for each job
         for job in self.jobs:
             job["workdir"] = os.path.join(self.workdir, job["description"])
-            os.mkdir(job["workdir"])
+            maybe_mkdir(job["workdir"])
         # temporary ipython profile directory
         self.ipythondir = os.path.join(self.workdir, ".ipython")
-        os.mkdir(self.ipythondir)
+        maybe_mkdir(self.ipythondir)
         # log dir
         self.logdir = os.path.join(self.workdir, "log")
-        os.mkdir(self.logdir)
+        maybe_mkdir(self.logdir)
         # place to keep completion info
         self.progress_store = os.path.join(self.workdir, ".progress")
 

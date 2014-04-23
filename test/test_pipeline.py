@@ -31,6 +31,14 @@ class TestPipeline(object):
         shutil.rmtree(cls.workdir)
         shutil.rmtree(cls.tmpdir)
 
+    def test_start_is_idempotent(self):
+        """Starting a pipeline should be idempotent
+        so we can pick up again after failiures."""
+        before = os.listdir(self.p.workdir)
+        self.p.start()
+        after = os.listdir(self.p.workdir)
+        assert before == after
+
     def test_function_call(self):
         """Test distributed function calls."""
         @interactive
