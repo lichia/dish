@@ -14,11 +14,6 @@ from IPython.parallel import require, interactive
 from random import randint
 
 
-def _get_wrapper_fn():
-    return getattr(__import__("dish.utils", fromlist=["wrapper"]),
-                   "wrapper")
-
-
 class Pipeline(object):
     """Represents the abstraction of a pipeline of jobs to be run
     distributed over machines
