@@ -57,8 +57,6 @@ class Pipeline(object):
         """Initialize workdir, logging, etc. in preparation for running jobs.
         """
 
-        # TODO make idempotent
-
         # make a working directory for each job
         for job in self.jobs:
             job["workdir"] = os.path.join(self.workdir, job["description"])
@@ -105,9 +103,24 @@ class Pipeline(object):
         # and memory are actually going to be availible
         return num_engines, cores_per_engine, mem_per_engine
 
-    def call(self, f, cores=1, mem=None):
-        """Call the function `f`. It will be wrapped for logging and then
-        passed each `job` that it is being called on, along with a logger.
+    def map(self, f, cores=1, mem=None):
+        """Map the function `f` over all of the `jobs` in this pipeline. `f`
+        must be a function of two arguments, the job and a logger. It
+        should modify the job it is passed, which will then be
+        returned over the wire. A silly example:
+
+        ```
+        def f(job, logger):
+            job["capitalized_description"] = job["description"].toupper()
+        p.map(f)
+        ```
+
+        Will give each `job` in the pipeline a `capitalized_description`
+        attribute, which can then be used in future pipline operations.
+
+        `cores` and `mem` are used to specify the cores and memory
+        required by this step; they will be passed to the underlying
+        scheduler.
 
         """
         engines, cores, mem = self._compute_resources(cores, mem)
@@ -141,4 +154,4 @@ class Pipeline(object):
             command = template.format(**job)
             logger.info("Running command {}".format(command))
             subprocess.check_call(command, shell=True)
-        self.call(jobwrapper)
+        self.map(jobwrapper)

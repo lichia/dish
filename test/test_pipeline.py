@@ -41,15 +41,15 @@ class TestPipeline(object):
         after = os.listdir(self.p.workdir)
         assert before == after
 
-    def test_basic_call(self):
-        """Test distributed function calls."""
+    def test_basic_map(self):
+        """Test distributed mapping."""
         def trivial(job, logger):
             job["test"] = "test"
-        self.p.call(trivial)
+        self.p.map(trivial)
         for job in self.p.jobs:
             assert job["test"] == "test"
 
-    def test_call_with_module(self):
+    def test_map_with_module(self):
         """You should be able to use imported modules in remote function
         calls.
 
@@ -58,7 +58,7 @@ class TestPipeline(object):
             # TODO for some reason we still can't pickle methods so attaching
             # a regex match object doesn't work here
             job["test"] = bool(re.search("test", job["description"]))
-        self.p.call(silly_regex)
+        self.p.map(silly_regex)
         for job in self.p.jobs:
             assert job["test"]  # should be True
 
