@@ -6,6 +6,8 @@ import shutil
 import os
 from cluster_helper import cluster
 
+import re
+
 if os.uname()[0] == 'Darwin':
     # workaround for stupid OSX file handle limits
     # see: https://github.com/roryk/ipython-cluster-helper/issues/18
@@ -39,11 +41,29 @@ class TestPipeline(object):
         after = os.listdir(self.p.workdir)
         assert before == after
 
-    def test_function_call(self):
+    def test_basic_call(self):
         """Test distributed function calls."""
-        @interactive
         def trivial(job, logger):
             job["test"] = "test"
         self.p.call(trivial)
         for job in self.p.jobs:
             assert job["test"] == "test"
+
+    def test_call_with_module(self):
+        """You should be able to use imported modules in remote function
+        calls.
+
+        """
+        def silly_regex(job, logger):
+            # TODO for some reason we still can't pickle methods so attaching
+            # a regex match object doesn't work here
+            job["test"] = bool(re.search("test", job["description"]))
+        self.p.call(silly_regex)
+        for job in self.p.jobs:
+            assert job["test"]  # should be True
+
+    def test_run(self):
+        """Test that running commands works."""
+        self.p.run("touch {workdir}/test.txt")
+        for job in self.p.jobs:
+            assert os.path.exists(os.path.join(job["workdir"], "test.txt"))

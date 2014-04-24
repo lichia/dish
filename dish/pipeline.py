@@ -3,16 +3,17 @@ import os
 
 from cluster_helper.cluster import cluster_view
 
-from logbook import FileHandler, Logger
+from logbook import FileHandler
 from dish.logging.zmqextras import ZeroMQPullSubscriber
 
-from dish.logging.wrapper import _wrapper
+from dish.distributed import logging_wrapper, use_cloudpickle
 from dish.fsutils import maybe_mkdir
 
 from IPython.utils import localinterfaces
-from IPython.parallel import require, interactive
 
 from random import randint
+
+import subprocess
 
 
 class Pipeline(object):
@@ -97,7 +98,8 @@ class Pipeline(object):
     def _compute_resources(self, cores_per_engine, mem_per_engine):
         if cores_per_engine > self.total_cores:
             raise ValueError("A job requested {0} but only {1}"
-                             " are available.".format(cores, self.total_cores))
+                             " are available.".format(cores_per_engine,
+                                                      self.total_cores))
         num_engines = self.total_cores // cores_per_engine
         # TODO in the future, should maybe validate that requested cores
         # and memory are actually going to be availible
@@ -115,13 +117,28 @@ class Pipeline(object):
         with cluster_view(self.scheduler, self.queue,
                           engines, profile=self.ipythondir,
                           extra_params=extra_params) as view:
-            # push connection info to engines and import necessary things
+            # using cloudpickle allows us to serialize all sorts of things
+            # we wouldn't otherwise be able to
             dview = view.client.direct_view()
-            dview["ip"] = self.listen_ip
-            dview["port"] = self.listen_port
-            dview["f"] = f
-            with dview.sync_imports():
-                from logbook import NestedSetup, Logger, FileHandler
-                from dish.logging.zmqextras import ZeroMQPushHandler
-                import os
-            self.jobs = view.map_sync(_wrapper, self.jobs)
+            use_cloudpickle()
+            dview.apply(use_cloudpickle)
+            self.jobs = view.map_sync(logging_wrapper, self.jobs,
+                                      (f for j in self.jobs),
+                                      (self.listen_ip for j in self.jobs),
+                                      (self.listen_port for j in self.jobs))
+
+    def run(self, template, cores=1, mem=None):
+        """Run the `template` formatted with the contents of each job. Example:
+
+        ```
+        p.run("touch {workdir}/example.txt")
+        ```
+
+        will make an example.txt file in each job's workdir
+
+        """
+        def jobwrapper(job, logger):
+            command = template.format(**job)
+            logger.info("Running command {}".format(command))
+            subprocess.check_call(command, shell=True)
+        self.call(jobwrapper)

@@ -13,6 +13,7 @@ setup(
         'ipython-cluster-helper',
         'ipython >= 2.0.0',
         'logbook',
-        'pyzmq'
+        'pyzmq',
+        'cloud'
     ]
 )
