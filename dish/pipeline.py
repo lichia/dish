@@ -151,18 +151,31 @@ class Pipeline(object):
                                       (self.listen_ip for j in self.jobs),
                                       (self.listen_port for j in self.jobs))
 
-    def run(self, template, cores=1, mem=None):
+    def run(self, template, cores=1, mem=None, capture_in=None):
         """Run the `template` formatted with the contents of each job. Example:
 
         ```
         p.run("touch {workdir}/example.txt")
         ```
 
-        will make an example.txt file in each job's workdir
+        will make an example.txt file in each job's workdir.
+
+        `cores` and `mem` mean the same thing they do in the `map` method.
+
+        If a string is passed for `capture_in`, the stdout of the command
+        will be captured in `job[capture_in]` for each job.
 
         """
-        def jobwrapper(job, logger):
+        def cmdwrapper(job, logger):
             command = template.format(**job)
-            logger.info("Running command {}".format(command))
-            subprocess.check_call(command, shell=True)
-        self.map(jobwrapper)
+            to_log = "Running command {}".format(command)
+            if capture_in:
+                to_log += "Capturing output in job[{}]".format(capture_in)
+                do = subprocess.check_output
+            else:
+                do = subprocess.check_call
+            output = do(command, shell=True)
+            if capture_in:
+                job[capture_in] = output
+
+        self.map(cmdwrapper)

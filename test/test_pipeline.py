@@ -76,3 +76,9 @@ class TestPipeline(object):
         self.p.run("touch {workdir}/test.txt")
         for job in self.p.jobs:
             assert os.path.exists(os.path.join(job["workdir"], "test.txt"))
+
+    def test_capturing_output(self):
+        """Test capturing output of commands."""
+        self.p.run("echo hello", capture_in="output")
+        for job in self.p.jobs:
+            assert job["output"] == "hello\n"
