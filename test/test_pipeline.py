@@ -16,7 +16,7 @@ if os.uname()[0] == 'Darwin':
 
 
 class TestPipeline(object):
-    """Integration test that Pipelines work."""
+    """Integration test that Pipelines work with spinning up a cluster."""
 
     @classmethod
     def setup_class(cls):
@@ -40,6 +40,15 @@ class TestPipeline(object):
         self.p.start()
         after = os.listdir(self.p.workdir)
         assert before == after
+
+    def test_localmap(self):
+        """Test that localmapping works just like mapping
+        with a cluster."""
+        def trivial(job, logger):
+            job["test"] = "test"
+        self.p.localmap(trivial)
+        for job in self.p.jobs:
+            assert job["test"] == "test"
 
     def test_basic_map(self):
         """Test distributed mapping."""

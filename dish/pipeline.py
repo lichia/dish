@@ -103,6 +103,17 @@ class Pipeline(object):
         # and memory are actually going to be availible
         return num_engines, cores_per_engine, mem_per_engine
 
+    def localmap(self, f):
+        """Just like map, but work locally rather than launching an ipython
+        cluster.  This is useful for tasks where the cluster launch
+        overhead would swamp the cost of the actual work to be done.
+
+        """
+        self.jobs = map(logging_wrapper, self.jobs,
+                        (f for j in self.jobs),
+                        (self.listen_ip for j in self.jobs),
+                        (self.listen_port for j in self.jobs))
+
     def map(self, f, cores=1, mem=None):
         """Map the function `f` over all of the `jobs` in this pipeline. `f`
         must be a function of two arguments, the job and a logger. It
