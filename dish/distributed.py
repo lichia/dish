@@ -14,13 +14,17 @@ def logging_wrapper(job, f, ip, port):
     over zmq and have something usefull happen to them
     """
     handler = NestedSetup([
-        ZeroMQPushHandler("tcp://" + ip + ":" + port),
+        ZeroMQPushHandler("tcp://" + ip + ":" + port, level="DEBUG"),
         FileHandler(os.path.join(job["workdir"], job["description"]+".log"),
                     level="DEBUG", bubble=True)
     ])
     logger = Logger(job["description"])
     with handler.applicationbound():
-        f(job, logger=logger)
+        try:
+            f(job, logger=logger)
+        except:
+            logger.exception("Task failed with traceback:")
+            raise
         # TODO cleanup zmq stuff
         return job
 
