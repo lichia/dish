@@ -68,8 +68,6 @@ class Pipeline(object):
         # log dir
         self.logdir = os.path.join(self.workdir, "log")
         maybe_mkdir(self.logdir)
-        # place to keep completion info
-        self.progress_store = os.path.join(self.workdir, ".progress")
 
         # determine which IP we are going to listen on for logging
         try:
