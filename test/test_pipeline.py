@@ -86,7 +86,7 @@ class TestPipeline(object):
         for job in self.p.jobs:
             assert job["output"] == "hello\n"
 
-    def test_logging_works(self):
+    def test_logging(self):
         """Test that logging information is propagated and stored
         correctly.
         """
@@ -113,3 +113,16 @@ class TestPipeline(object):
                                         job["description"]+".log")).read()
             assert job["description"]+"error" in job_log
             assert job["description"]+"error" in pipeline_log
+
+    def test_groups(self):
+        """Test that groups work."""
+        def inc(job, logger):
+            if job.get("test"):
+                job["test"] += 1
+            else:
+                job["test"] = 1
+        with self.p.group():
+            self.p.map(inc)
+            self.p.map(inc)
+        for job in self.p.jobs:
+            assert job["test"] == 2

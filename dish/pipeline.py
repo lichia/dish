@@ -12,6 +12,7 @@ from dish.fsutils import maybe_mkdir
 from IPython.utils import localinterfaces
 
 from random import randint
+from contextlib import contextmanager
 
 import subprocess
 
@@ -83,6 +84,9 @@ class Pipeline(object):
                                                ":" + self.listen_port)
         self.controller = self.subscriber.dispatch_in_background(handler)
 
+        # setup default cluster_view
+        self._cluster_view = cluster_view
+
     def stop(self):
         """Gracefully shutdown the Pipeline, cleaning up threads, sockets,
         etc.  Leaves working directory intact so everything can in
@@ -92,15 +96,47 @@ class Pipeline(object):
         self.controller.stop()
         self.subscriber.close()
 
-    def _compute_resources(self, cores_per_engine, mem_per_engine):
+    def _compute_resources(self, cores_per_engine, mem_per_engine,
+                           max_engines):
         if cores_per_engine > self.total_cores:
             raise ValueError("A job requested {0} but only {1}"
                              " are available.".format(cores_per_engine,
                                                       self.total_cores))
         num_engines = self.total_cores // cores_per_engine
-        # TODO in the future, should maybe validate that requested cores
-        # and memory are actually going to be availible
+        if max_engines:
+            num_engines = min(num_engines, max_engines)
+        # TODO in the future, should maybe validate that requested
+        # cores and memory are actually going to be availible. This
+        # would unfortunately have to be specialized for each
+        # scheduler probably.
         return num_engines, cores_per_engine, mem_per_engine
+
+    @contextmanager
+    def group(self, cores=1, mem=None, max=None):
+        # TODO this duplicates some code from p.map and is a bit
+        # clunky, there is probably a better abstraction here
+        engines, cores, mem = self._compute_resources(cores, mem, max)
+        extra_params = {"run_local": self.local,
+                        "cores": cores,
+                        "mem": mem}
+        cm = cluster_view(self.scheduler, self.queue,
+                          engines, profile=self.ipythondir,
+                          extra_params=extra_params)
+        view = cm.gen.next()
+
+        @contextmanager
+        def reuse_view(*args, **kwargs):
+            yield view
+
+        self._cluster_view = reuse_view
+        # everything done in the block will use the view we just made
+        yield
+        try:
+            cm.gen.next()  # clean up the view we've been using
+        except StopIteration:
+            pass
+        # restore the normal cluster_view context manager on exit
+        self._cluster_view = cluster_view
 
     def localmap(self, f):
         """Just like map, but work locally rather than launching an ipython
@@ -113,7 +149,7 @@ class Pipeline(object):
                         (self.listen_ip for j in self.jobs),
                         (self.listen_port for j in self.jobs))
 
-    def map(self, f, cores=1, mem=None):
+    def map(self, f, cores=1, mem=None, max=None):
         """Map the function `f` over all of the `jobs` in this pipeline. `f`
         must be a function of two arguments, the job and a logger. It
         should modify the job it is passed, which will then be
@@ -130,16 +166,20 @@ class Pipeline(object):
 
         `cores` and `mem` are used to specify the cores and memory
         required by this step; they will be passed to the underlying
-        scheduler.
+        scheduler. `max` can be used as a hard limit on the number of
+        jobs to run. This is useful if, for example, a particular task
+        puts pressure on some sort of storage system (a distributed
+        file system, object store, etc.) that you know will fail under
+        too much load.
 
         """
-        engines, cores, mem = self._compute_resources(cores, mem)
+        engines, cores, mem = self._compute_resources(cores, mem, max)
         extra_params = {"run_local": self.local,
                         "cores": cores,
                         "mem": mem}
-        with cluster_view(self.scheduler, self.queue,
-                          engines, profile=self.ipythondir,
-                          extra_params=extra_params) as view:
+        with self._cluster_view(self.scheduler, self.queue,
+                                engines, profile=self.ipythondir,
+                                extra_params=extra_params) as view:
             # using cloudpickle allows us to serialize all sorts of things
             # we wouldn't otherwise be able to
             dview = view.client.direct_view()
@@ -150,7 +190,7 @@ class Pipeline(object):
                                       (self.listen_ip for j in self.jobs),
                                       (self.listen_port for j in self.jobs))
 
-    def run(self, template, cores=1, mem=None, capture_in=None):
+    def run(self, template, cores=1, mem=None, max=None, capture_in=None):
         """Run the `template` formatted with the contents of each job. Example:
 
         ```
@@ -165,16 +205,18 @@ class Pipeline(object):
         will be captured in `job[capture_in]` for each job.
 
         """
+        # TODO attach stdout of command to logging
         def cmdwrapper(job, logger):
             command = template.format(**job)
-            to_log = "Running command {}".format(command)
+            to_log = "Running command `{}`".format(command)
             if capture_in:
                 to_log += "Capturing output in job[{}]".format(capture_in)
                 do = subprocess.check_output
             else:
                 do = subprocess.check_call
+            logger.info(to_log)
             output = do(command, shell=True)
             if capture_in:
                 job[capture_in] = output
 
-        self.map(cmdwrapper)
+        self.map(cmdwrapper, cores=cores, mem=mem, max=max)
