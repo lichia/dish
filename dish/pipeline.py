@@ -128,15 +128,17 @@ class Pipeline(object):
         def reuse_view(*args, **kwargs):
             yield view
 
-        self._cluster_view = reuse_view
         # everything done in the block will use the view we just made
-        yield
+        self._cluster_view = reuse_view
         try:
-            cm.gen.next()  # clean up the view we've been using
-        except StopIteration:
-            pass
-        # restore the normal cluster_view context manager on exit
-        self._cluster_view = cluster_view
+            yield
+        finally:
+            # restore the normal cluster_view context manager on exit
+            self._cluster_view = cluster_view
+            try:
+                cm.gen.next()  # clean up the view we've been using
+            except StopIteration:
+                pass
 
     def localmap(self, f):
         """Just like map, but work locally rather than launching an ipython

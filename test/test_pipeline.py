@@ -21,20 +21,18 @@ if os.uname()[0] == 'Darwin':
 class TestPipeline(object):
     """Integration test that Pipelines work with spinning up a cluster."""
 
-    @classmethod
-    def setup_class(cls):
-        cls.workdir = tempfile.mkdtemp()
-        cls.tmpdir = tempfile.mkdtemp()
-        os.chdir(cls.tmpdir)
+    def setup(self):
+        self.workdir = tempfile.mkdtemp()
+        self.tmpdir = tempfile.mkdtemp()
+        os.chdir(self.tmpdir)
         jobs = [{"description": "test1"}, {"description": "test2"}]
-        cls.p = Pipeline(cls.workdir, jobs, 1, "torque", "NA", local=True)
-        cls.p.start()
+        self.p = Pipeline(self.workdir, jobs, 1, "torque", "NA", local=True)
+        self.p.start()
 
-    @classmethod
-    def teardown_class(cls):
-        cls.p.stop()
-        shutil.rmtree(cls.workdir)
-        shutil.rmtree(cls.tmpdir)
+    def teardown(self):
+        self.p.stop()
+        shutil.rmtree(self.workdir)
+        shutil.rmtree(self.tmpdir)
 
     def test_start_is_idempotent(self):
         """Starting a pipeline should be idempotent
@@ -126,3 +124,22 @@ class TestPipeline(object):
             self.p.map(inc)
         for job in self.p.jobs:
             assert job["test"] == 2
+
+    def test_groups_with_error(self):
+        """Regression test that groups that throw errors correctly restore the
+        _cluster_view context manager.
+
+        """
+
+        def fails(job, logger):
+            raise RuntimeError("fail")
+
+        def trivial(job, logger):
+            job["test"] = "test"
+
+        with self.p.group():
+            with assert_raises(CompositeError):
+                self.p.map(fails)
+        self.p.map(trivial)
+        for job in self.p.jobs:
+            assert job["test"] == "test"
