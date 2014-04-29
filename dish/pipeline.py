@@ -45,7 +45,8 @@ class Pipeline(object):
                 raise ValueError("job {} has not description".format(job))
         workdir = os.path.abspath(os.path.expanduser(workdir))
         if not os.path.exists(workdir):
-            raise ValueError("workdir: {} appears not to exist".format(workdir))
+            raise ValueError(
+                "workdir: {} appears not to exist".format(workdir))
         self.workdir = workdir
         self.jobs = jobs
         self.total_cores = total_cores
