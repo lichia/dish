@@ -1,13 +1,6 @@
-from cluster_helper import cluster
 import tempfile
 import os
 from dish.pipeline import Pipeline
-
-if os.uname()[0] == 'Darwin':
-    # workaround for stupid OSX file handle limits
-    # see: https://github.com/roryk/ipython-cluster-helper/issues/18
-    cluster.cluster_cmd_argv = [s.replace("50000", "2000") for s
-                                in cluster.cluster_cmd_argv]
 
 
 workdir = tempfile.mkdtemp()

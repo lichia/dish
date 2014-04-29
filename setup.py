@@ -10,7 +10,7 @@ setup(
     url="https://github.com/porterjamesj/dish",
     packages=find_packages(),
     install_requires=[
-        'ipython-cluster-helper',
+        'ipython-cluster-helper == 0.2.19',
         'ipython >= 2.0.0',
         'logbook',
         'pyzmq',

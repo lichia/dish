@@ -1,21 +1,13 @@
 from dish.pipeline import Pipeline
-from IPython.parallel import interactive
 from IPython.parallel.error import CompositeError
 
 import tempfile
 import shutil
 import os
-from cluster_helper import cluster
 
 import re
 
 from nose.tools import assert_raises
-
-if os.uname()[0] == 'Darwin':
-    # workaround for stupid OSX file handle limits
-    # see: https://github.com/roryk/ipython-cluster-helper/issues/18
-    cluster.cluster_cmd_argv = [s.replace("50000", "2000") for s
-                                in cluster.cluster_cmd_argv]
 
 
 class TestPipeline(object):
