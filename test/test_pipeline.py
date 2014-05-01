@@ -135,3 +135,37 @@ class TestPipeline(object):
         self.p.map(trivial)
         for job in self.p.jobs:
             assert job["test"] == "test"
+
+    def test_transaction_works(self):
+        """Test that running commands transactionally works as expected."""
+        old_jobs = self.p.jobs
+        with self.p.transaction("{workdir}/A"):
+            self.p.run("touch {tmpdir}/A")
+        new_jobs = self.p.jobs
+        assert new_jobs == old_jobs
+        for job in self.p.jobs:
+            assert os.path.exists(os.path.join(job["workdir"], "A"))
+
+    def test_transaction_skips(self):
+        """Test that running commands idempotently skips if targets already
+        exist.
+        """
+        self.p.run("touch {workdir}/A")
+        with self.p.transaction("{workdir}/A"):
+            self.p.run("touch {tmpdir}/B")
+        pipeline_log = open(os.path.join(self.p.logdir, "dish.log")).read()
+        assert "Skipping" in pipeline_log
+        for job in self.p.jobs:
+            assert not os.path.exists(os.path.join(job["workdir"], "B"))
+
+    def test_transaction_doesnt_copy_on_failiure(self):
+        """Transactions should not copy anything over in the case
+        that an error is raised"""
+        def errors(job, logger):
+            raise RuntimeError("test error")
+        with assert_raises(CompositeError):
+            with self.p.transaction("{workdir}/A"):
+                self.p.run("touch {tmpdir}/A")
+                self.p.map(errors)
+        for job in self.p.jobs:
+            assert not os.path.exists(os.path.join(job["workdir"], "A"))

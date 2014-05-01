@@ -1,20 +1,20 @@
-
 import os
+import tempfile
+import shutil
 
 from cluster_helper.cluster import cluster_view
 
-from logbook import FileHandler
+from logbook import FileHandler, Logger
 from dish.logging.zmqextras import ZeroMQPullSubscriber
 
 from dish.distributed import logging_wrapper, use_cloudpickle
-from dish.fsutils import maybe_mkdir
+from dish import fs
+from dish.factories import cmdrunner
 
 from IPython.utils import localinterfaces
 
 from random import randint
 from contextlib import contextmanager
-
-import subprocess
 
 
 class Pipeline(object):
@@ -62,13 +62,13 @@ class Pipeline(object):
         # make a working directory for each job
         for job in self.jobs:
             job["workdir"] = os.path.join(self.workdir, job["description"])
-            maybe_mkdir(job["workdir"])
+            fs.maybe_mkdir(job["workdir"])
         # temporary ipython profile directory
         self.ipythondir = os.path.join(self.workdir, ".ipython")
-        maybe_mkdir(self.ipythondir)
+        fs.maybe_mkdir(self.ipythondir)
         # log dir
         self.logdir = os.path.join(self.workdir, "log")
-        maybe_mkdir(self.logdir)
+        fs.maybe_mkdir(self.logdir)
 
         # determine which IP we are going to listen on for logging
         try:
@@ -78,11 +78,12 @@ class Pipeline(object):
                              " any publicly visible IP addresses")
 
         # setup ZMQ logging
-        handler = FileHandler(os.path.join(self.logdir, "dish.log"))
+        self.handler = FileHandler(os.path.join(self.logdir, "dish.log"))
         self.listen_port = str(randint(5000, 10000))
         self.subscriber = ZeroMQPullSubscriber("tcp://" + self.listen_ip +
                                                ":" + self.listen_port)
-        self.controller = self.subscriber.dispatch_in_background(handler)
+        self.controller = self.subscriber.dispatch_in_background(self.handler)
+        self.logger = Logger("dish_master")
 
         # setup default cluster_view
         self._cluster_view = cluster_view
@@ -140,6 +141,35 @@ class Pipeline(object):
             except StopIteration:
                 pass
 
+    @contextmanager
+    def transaction(self, targets):
+        if type(targets) is not list:
+            targets = [targets]
+        to_run = []
+        dont_run = []
+        for job in self.jobs:
+            if all((os.path.exists(target.format(**job))
+                    for target in targets)):
+                info = ("Skipping transaction for job {} targets {} "
+                        "already present")
+                with self.handler.applicationbound():
+                    self.logger.info(info.format(job["description"], targets))
+                dont_run.append(job)
+            else:
+                # targets not present for this job
+                to_run.append(job)
+        for job in to_run:
+            job["tmpdir"] = tempfile.mkdtemp(dir=job["workdir"])
+        self.jobs = to_run
+        try:
+            yield
+            for job in self.jobs:
+                fs.liftdir(job["tmpdir"], job["workdir"])
+        finally:
+            for job in self.jobs:
+                shutil.rmtree(job["tmpdir"])
+            self.jobs = dont_run + self.jobs
+
     def localmap(self, f):
         """Just like map, but work locally rather than launching an ipython
         cluster.  This is useful for tasks where the cluster launch
@@ -175,6 +205,13 @@ class Pipeline(object):
         too much load.
 
         """
+        if not self.jobs:
+            # this looks very odd, it's necessary because sometimes
+            # being a transaction causes self.jobs to be empty, and
+            # IPython throws errors if you try to make over the empty
+            # list. It might be cleaner to catch the error after
+            # letting IPython do the map; will have to think about it.
+            return
         engines, cores, mem = self._compute_resources(cores, mem, max)
         extra_params = {"run_local": self.local,
                         "cores": cores,
@@ -192,7 +229,7 @@ class Pipeline(object):
                                       (self.listen_ip for j in self.jobs),
                                       (self.listen_port for j in self.jobs))
 
-    def run(self, template, cores=1, mem=None, max=None, capture_in=None):
+    def run(self, template, capture_in=None, **kwargs):
         """Run the `template` formatted with the contents of each job. Example:
 
         ```
@@ -207,18 +244,5 @@ class Pipeline(object):
         will be captured in `job[capture_in]` for each job.
 
         """
-        # TODO attach stdout of command to logging
-        def cmdwrapper(job, logger):
-            command = template.format(**job)
-            to_log = "Running command `{}`".format(command)
-            if capture_in:
-                to_log += "Capturing output in job[{}]".format(capture_in)
-                do = subprocess.check_output
-            else:
-                do = subprocess.check_call
-            logger.info(to_log)
-            output = do(command, shell=True)
-            if capture_in:
-                job[capture_in] = output
-
-        self.map(cmdwrapper, cores=cores, mem=mem, max=max)
+        runner = cmdrunner(template, capture_in)
+        self.map(runner, **kwargs)
