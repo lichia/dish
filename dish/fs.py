@@ -1,8 +1,5 @@
 import os
 import shutil
-import tempfile
-
-from contextlib import contextmanager
 
 
 def maybe_mkdir(path):
