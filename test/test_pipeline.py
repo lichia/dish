@@ -1,4 +1,4 @@
-import dish.pipeline as dp
+from dish.pipeline import Pipeline
 from IPython.parallel.error import CompositeError
 
 import tempfile
@@ -8,34 +8,12 @@ import os
 import re
 
 from nose.tools import assert_raises
-from mock import MagicMock
-from contextlib import contextmanager
+
+from .utils import mock_view, assert_eventually_equal
 
 # TODO figure out a good way to determine this at runtime
 # I really don't want to have to write a nose plugin -_____-
 MOCK_CLUSTER = True
-
-
-class MockView(MagicMock):
-    """A mock IPython cluster view"""
-
-    def map_sync(self, f, *args):
-        res = []
-        exceptions = []
-        for group in zip(*args):
-            try:
-                res.append(f(*group))
-            except Exception as e:
-                exceptions.append(e)
-        if exceptions:
-            raise CompositeError("Mock Composite error", exceptions)
-        else:
-            return res
-
-
-@contextmanager
-def mock_view(*args, **kwargs):
-    yield MockView()
 
 
 class TestPipeline(object):
@@ -46,7 +24,7 @@ class TestPipeline(object):
         self.tmpdir = tempfile.mkdtemp()
         os.chdir(self.tmpdir)
         jobs = [{"description": "test1"}, {"description": "test2"}]
-        self.p = dp.Pipeline(self.workdir, jobs, 1, "torque", "NA", local=True)
+        self.p = Pipeline(self.workdir, jobs, 1, "torque", "NA", local=True)
         if MOCK_CLUSTER:
             self.p._cluster_view = mock_view
         self.p.start()
@@ -203,9 +181,10 @@ class TestPipeline(object):
     def test_stdout_is_logged(self):
         """p.run should log stdout of the command."""
         self.p.run("echo testing123")
+        # import ipdb; ipdb.set_trace()
         pipeline_log = open(os.path.join(self.p.logdir, "dish.log")).read()
-        assert "testing123" in pipeline_log
+        assert_eventually_equal("testing123" in pipeline_log, True)
         for job in self.p.jobs:
             job_log = open(os.path.join(job["workdir"],
                                         job["description"]+".log")).read()
-            assert "testing123" in job_log
+            assert_eventually_equal("testing123" in job_log, True)
