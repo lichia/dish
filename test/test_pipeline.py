@@ -199,3 +199,13 @@ class TestPipeline(object):
                 self.p.map(errors)
         for job in self.p.jobs:
             assert not os.path.exists(os.path.join(job["workdir"], "A"))
+
+    def test_stdout_is_logged(self):
+        """p.run should log stdout of the command."""
+        self.p.run("echo testing123")
+        pipeline_log = open(os.path.join(self.p.logdir, "dish.log")).read()
+        assert "testing123" in pipeline_log
+        for job in self.p.jobs:
+            job_log = open(os.path.join(job["workdir"],
+                                        job["description"]+".log")).read()
+            assert "testing123" in job_log

@@ -25,7 +25,6 @@ def logging_wrapper(job, f, ip, port):
         except:
             logger.exception("Task failed with traceback:")
             raise
-        # TODO cleanup zmq stuff
         return job
 
 
