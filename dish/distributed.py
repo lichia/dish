@@ -11,7 +11,7 @@ def logging_wrapper(job, f, ip, port):
     setting up logging
 
     ip and port should specify somewhere we can push logging messages
-    over zmq and have something usefull happen to them
+    over zmq and have something useful happen to them
     """
     handler = NestedSetup([
         ZeroMQPushHandler("tcp://" + ip + ":" + port, level="DEBUG"),
