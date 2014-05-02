@@ -54,6 +54,9 @@ class Pipeline(object):
         self.scheduler = scheduler
         self.queue = queue
         self.local = local
+        # setup default cluster_view
+        self._cluster_view = cluster_view
+
 
     def start(self):
         """Initialize workdir, logging, etc. in preparation for running jobs.
@@ -84,9 +87,6 @@ class Pipeline(object):
                                                ":" + self.listen_port)
         self.controller = self.subscriber.dispatch_in_background(self.handler)
         self.logger = Logger("dish_master")
-
-        # setup default cluster_view
-        self._cluster_view = cluster_view
 
     def stop(self):
         """Gracefully shutdown the Pipeline, cleaning up threads, sockets,
@@ -120,9 +120,10 @@ class Pipeline(object):
         extra_params = {"run_local": self.local,
                         "cores": cores,
                         "mem": mem}
-        cm = cluster_view(self.scheduler, self.queue,
-                          engines, profile=self.ipythondir,
-                          extra_params=extra_params)
+        old_view_factory = self._cluster_view
+        cm = self._cluster_view(self.scheduler, self.queue,
+                                engines, profile=self.ipythondir,
+                                extra_params=extra_params)
         view = cm.gen.next()
 
         @contextmanager
@@ -135,7 +136,7 @@ class Pipeline(object):
             yield
         finally:
             # restore the normal cluster_view context manager on exit
-            self._cluster_view = cluster_view
+            self._cluster_view = old_view_factory
             try:
                 cm.gen.next()  # clean up the view we've been using
             except StopIteration:
