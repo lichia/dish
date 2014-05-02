@@ -149,14 +149,14 @@ class Pipeline(object):
         to_run = []
         dont_run = []
         for job in self.jobs:
-            if all((os.path.exists(target.format(**job))
-                    for target in targets)):
+            canonical_targets = fs.canonicalize(job, targets)
+            if all((os.path.exists(target)
+                    for target in canonical_targets)):
                 info = ("Skipping transaction for job {} targets {} "
                         "already present")
-                fmt_targets = [target.format(**job) for target in targets]
                 with self.handler.applicationbound():
                     self.logger.info(info.format(job["description"],
-                                                 fmt_targets))
+                                                 canonical_targets))
                 dont_run.append(job)
             else:
                 # targets not present for this job

@@ -181,10 +181,23 @@ class TestPipeline(object):
     def test_stdout_is_logged(self):
         """p.run should log stdout of the command."""
         self.p.run("echo testing123")
-        # import ipdb; ipdb.set_trace()
         pipeline_log = open(os.path.join(self.p.logdir, "dish.log")).read()
         assert_eventually_equal("testing123" in pipeline_log, True)
         for job in self.p.jobs:
             job_log = open(os.path.join(job["workdir"],
                                         job["description"]+".log")).read()
             assert_eventually_equal("testing123" in job_log, True)
+
+    def test_should_run_in_job_workdir(self):
+        """Everything should be run in the workdir of the correct job."""
+        self.p.run("touch test")
+        for job in self.p.jobs:
+            assert os.path.exists(os.path.join(job["workdir"], "test"))
+
+    def test_transaction_targets_should_be_relative_to_workdir(self):
+        """Transaction targets should be specifiable relative to workdir."""
+        self.p.run("touch A")
+        with self.p.transaction("A"):
+            self.p.run("touch B")
+        for job in self.p.jobs:
+            assert not os.path.exists(os.path.join(job["workdir"], "B"))
