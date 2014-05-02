@@ -153,8 +153,10 @@ class Pipeline(object):
                     for target in targets)):
                 info = ("Skipping transaction for job {} targets {} "
                         "already present")
+                fmt_targets = [target.format(**job) for target in targets]
                 with self.handler.applicationbound():
-                    self.logger.info(info.format(job["description"], targets))
+                    self.logger.info(info.format(job["description"],
+                                                 fmt_targets))
                 dont_run.append(job)
             else:
                 # targets not present for this job
