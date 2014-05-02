@@ -13,7 +13,9 @@ def cmdrunner(template, capture_in):
             to_log += "Capturing output in job[{}]".format(capture_in)
         logger.info(to_log)
         output = subprocess.check_output(command, shell=True)
-        logger.info(output)
+        stripped = output.rstrip()
+        if stripped:  # don't log empty line if there's no output
+            logger.info(stripped)
         if capture_in:
             job[capture_in] = output
     return runner
