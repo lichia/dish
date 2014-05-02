@@ -28,7 +28,7 @@ class MockView(MagicMock):
             except Exception as e:
                 exceptions.append(e)
         if exceptions:
-            raise CompositeError("Mock Composite error", [e])
+            raise CompositeError("Mock Composite error", exceptions)
         else:
             return res
 
