@@ -201,3 +201,16 @@ class TestPipeline(object):
             self.p.run("touch B")
         for job in self.p.jobs:
             assert not os.path.exists(os.path.join(job["workdir"], "B"))
+
+    def test_transaction_targets_should_be_made_in_tmpdir_first(self):
+        """Transaction targets should not be created in the workdir when paths
+        are relative.
+        """
+        with assert_raises(IndexError):
+            # should really be CompositeError but IPython
+            # CompositeError constructor is broken
+            with self.p.transaction("A"):
+                self.p.run("touch B")
+                self.p.run("i_dont_exist")  # so that transaction fails
+        for job in self.p.jobs:
+            assert not os.path.exists(os.path.join(job["workdir"], "B"))

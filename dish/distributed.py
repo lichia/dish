@@ -21,7 +21,10 @@ def logging_wrapper(job, f, ip, port):
     logger = Logger(job["description"])
     with handler.applicationbound():
         try:
-            os.chdir(job["workdir"])
+            if job.get("tmpdir"):
+                os.chdir(job["tmpdir"])
+            else:
+                os.chdir(job["workdir"])
             f(job, logger=logger)
         except:
             logger.exception("Task failed with traceback:")
