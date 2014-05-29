@@ -161,6 +161,108 @@ something like::
 This hopefully gets across what programming with dish feels like, now
 let's dive into some more advanced features.
 
+Resource Scheduling
+~~~~~~~~~~~~~~~~~~~
+
+dish is capable of using the pipeline's underlying resource scheduler
+to make intelligent use of cluster resources. The ``run`` method has
+three optional keyword arguments, ``cores``, ``mem``, and ``max`` for
+specifying the resources a command requires. For example, let's say
+you want to run a command like ``tophat``, which can make use of
+multiple cores to improve performance. Maybe you also know that for
+the work you're doing, tophat will require at least 12 GB of
+memory. You could write:
+
+..  code-block:: python
+
+    p.run("tophat -p 8 -o tophat_out /path/to/bowtie_index {fastq1} {fastq2}",
+          cores=8,
+          mem=12)
+
+(this of course assumes you have ``{fastq1}`` and ``{fastq2}`` keys on
+each job which contain the paths to the appropriate files.)
+
+This will cause dish to only run as many commands in parallel as are
+feasible for the given constraints. So if you constructed ``p`` to use
+20 cores, at most 2 ``tophat``s will be run in parallel; if ``p`` was
+constructed with 80 cores, 10 will be run in parallel, etc. dish will
+also tell the underlying scheduling system about your restrictions so
+it doesn't overcommit cores or memory on any given machine.
+
+In addition to ``cores`` and ``mem``, run also takes an optional
+``max`` keyword argument, which is interpreted as a hard limit on the
+number of commands to run in parallel, regardless of how many cores
+are available. This is useful if, for example, you know that a given
+command will stress some sort of storage backend and that if more than
+a certain number are run at once, failiures will occur.
+
+
+Storing command output
+~~~~~~~~~~~~~~~~~~~~~~
+
+It's often useful to use the ``job`` dictionary as a place to hold
+small amounts of information pertaining to the state of a running
+job. You can store the output of a run command on the ``job`` using
+the ``capture_in`` keyword argument. For example::
+
+  p.run("base64 /dev/urandom | head -c 10", capture_in="random_data")
+
+will get 10000 bytes of random data from /dev/urandom for each job and
+store the result in the jobs ``"random_data"`` key.
+
+We could then do something like::
+
+  p.run("touch {random_data}")
+
+to create a randomly named file in each job's workdir.
+
+
+Running python code
+~~~~~~~~~~~~~~~~~~~
+
+While dish is aimed primarily at running external tools, it is
+sometimes useful or necessary to write some glue code between them,
+e.g. to parse the output of some program and munge it into a format
+that can be input to another. dish makes this relatively painless with
+the ``map`` method.
+
+``p.map`` takes a single argument, a function whose signature is
+``f(job, logger)``. This function will be run in parallel and called
+once for each job, being passed the ``job`` and dish's logger, on
+which you can call all the standard methods (``info``, ``warning``,
+``error``, etc.) and have the results logged both to a job specific
+logfile and a logfile for the entire pipeline. ``f`` should modify the
+job in place and not return anything. For example::
+
+  def capitalize_descrpition(job, logger):
+      job["capitalized_description"] = job["description"].upper()
+  p.map(capitalize_description)
+
+Will result in each job getting a ``"capitalized_description"`` key::
+
+  >>> p.jobs
+  [{'capitalized_description': 'TEST1',
+    'description': 'test1',
+    'workdir': '/Users/james/scratch/workdir/test1'},
+   {'capitalized_description': 'TEST2',
+    'description': 'test2',
+    'workdir': '/Users/james/scratch/workdir/test2'}]
+
+We could then use this key in future operations, for example::
+
+  p.run("echo WHY ARE WE YELLING > {capitalized_description}.txt")
+
+``map`` takes the same resource scheduling keyword arguments as ``run`` and
+they behave in the same way.
+
+Note that calling ``p.map(f)`` will cause an IPython cluster to be
+launched to distribute the work over many machines. If ``f`` is not
+computationally intensive, the networking overhead of setting up a new
+IPython cluster can dwarf the cost of the work to be done. For these
+situations, there is another method ``localmap``, which has the same
+interface as ``map``, but just runs locally as a thin wrapper around
+Python's ``map`` builtin, avoiding networking overhead.
+
 
 
 .. _ipython-cluster-helper:
