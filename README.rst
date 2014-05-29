@@ -145,7 +145,7 @@ example, let's make some up at random::
   p.run("base64 /dev/urandom | head -c 10000 > {workdir}/data")
 
 Now each job's workdir has a file ``data`` with some random ASCII in
-it. Now let's count the number of ``A`` characters in each file.
+it. Now let's count the number of ``A`` characters in each file::
 
   p.run("grep -o A data | wc -l > count")
 
