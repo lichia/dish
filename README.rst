@@ -73,8 +73,9 @@ which represents one "chunk" of your data. You can then call methods
 on the pipeline that cause something to happen to each job. dish
 handles distributing the work across your cluster and making it
 fault-tolerant. Under the hood this is achieved using
-ipython-cluster-helper_, so dish should support all the resource
-schedulers that it does.
+ipython-cluster-helper_ to start a temporary IPython cluster via job
+submission to a resource scheduler, so dish should support all the
+resource schedulers that ``cluster_helper`` does.
 
 Constructing a simple Pipeline might look like:
 
@@ -262,6 +263,100 @@ IPython cluster can dwarf the cost of the work to be done. For these
 situations, there is another method ``localmap``, which has the same
 interface as ``map``, but just runs locally as a thin wrapper around
 Python's ``map`` builtin, avoiding networking overhead.
+
+
+Groups
+~~~~~
+
+Another useful tool for avoiding unnecessary overhead of cluster
+launches is groups. A group is simply a series of other dish method
+calls that run using the same IPython cluster and set of resource
+constraints. For example::
+
+  with p.group(cores=8, mem=8):
+      p.run("setup_program {data} -o config_info")
+      p.run("long_running_program {data} --config config_info -o output")
+
+will run ``setup_program`` and ``long_running_program`` using the same
+IPython cluster, whose size is determined by the resource constraints
+passed to the call to ``group``. This example also illustrates the
+main use case for ``group``—when you have a single computationally
+intensive program to run that requires some quick setup or cleanup
+work that isn't worth launching a separate cluster for.
+
+Transactions
+------------
+
+Using IPython clusters to distribute work makes dish fault-tolerant
+with respect to the failiure of individual cluster compute nodes and
+sporadically failing commands (for example due to I/O load). However,
+what about headnode failiures or total failiures of all resources
+(e.g. a power outage)?
+
+The easiest way to handle this sort of failiure is to simply restart
+the whole pipeline. This is not a very satisfying solution however,
+since it means throwing away a potentially large amount of work that's
+already been done. Fortunately dish provides an abstraction to handle
+doing some work transactionally and idempotently, which allows for the
+construction of pipelines that can crash and be restarted without
+having to redo work or worry about data in inconsistant states.
+
+The Pipeline ``transaction`` method is a context manager that takes a
+single argument, which is the path to a target file or a list of
+same. Everything inside the ``transaction`` will be skipped if the
+target file(s) exist(s) and executed if they doesn't (transactions
+happend idempotently with respect to the target). Additionally, when a
+transaction is entered, a temporary directory is created for each job
+and it's absolute path made available under
+``job["tmpdir"]``. Everything in the tmpdir will be copied to the
+job's workdir if and only if everything inside the transaction
+completes successfully (this is the sense in which a transaction is
+transactional). The tmpdir is deleted at the end of a transaction
+regardless of whether or not it succeeded. For example::
+
+  with p.transaction("{workdir}/target.txt"):
+      p.run("echo this will only appear once >> {tmpdir}/target.txt")
+
+will cause the creation of a ``target.txt`` file containing the text
+``this will only appear once`` the first time we run it and do nothing
+afterwords (since the target file eill exist).
+
+It's important never to write anything directly to a job's ``workdir``
+inside of a transaction—write things to the ``tmpdir`` instead and
+they will be moved over if the transaction succeeds. In order to make
+this easier, commands inside a transaction are run in the tmpdir by
+default. Targets are also specifiable relative to the workdir, so the
+above example could have been written::
+
+  with p.transaction("target.txt"):
+      p.run("echo this will only appear once >> target.txt")
+
+which is a bit more ergonomic.
+
+The use of transactions can be a bit subtle. Consider the following code::
+
+  with p.transaction("target.txt"):
+      p.run("first_step --output intermediate.txt")
+      p.run("potentially_failing_second_step --input intermediate.txt --output target.txt")
+      p.run("parse_target_output target.txt", capture_in="parsed")
+  p.run("do_something_with_output {parsed}")
+
+which is subtly broken. Since the *entire* transaction will be skipped
+if ``"target.txt"`` exists, the ``job`` sometimes will be missing a
+``parsed`` key when the call to ``do_something_with_output`` is
+made. To fix this, the call to ``parse_target_output`` should be moved
+outside of the transaction::
+  with p.transaction("target.txt"):
+      p.run("first_step --output intermediate.txt")
+      p.run("potentially_failing_second_step --input intermediate.txt --output target.txt")
+  p.run("parse_target_output target.txt", capture_in="parsed")
+  p.run("do_something_with_output {parsed}")
+
+
+When you put something in a transaction, you are saying that the only
+purpose of doing that thing is to produce the target file or files, so
+it's fine to skip it if the target(s) exist(s). Be careful not to lie
+about this, as incorrect behavior can result if you do.
 
 
 
