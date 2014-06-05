@@ -135,11 +135,11 @@ class Pipeline(object):
         # clunky, there is probably a better abstraction here
         engines, cores, mem = self._compute_resources(cores, mem, max)
         extra_params = {"run_local": self.local,
-                        "cores": cores,
                         "mem": mem}
         old_view_factory = self._cluster_view
         cm = self._cluster_view(self.scheduler, self.queue,
                                 engines, profile=self.ipythondir,
+                                cores_per_job=cores,
                                 extra_params=extra_params)
         view = cm.gen.next()
 
@@ -286,10 +286,10 @@ class Pipeline(object):
             return
         engines, cores, mem = self._compute_resources(cores, mem, max)
         extra_params = {"run_local": self.local,
-                        "cores": cores,
                         "mem": mem}
         with self._cluster_view(self.scheduler, self.queue,
                                 engines, profile=self.ipythondir,
+                                cores_per_job=cores,
                                 extra_params=extra_params) as view:
             # using cloudpickle allows us to serialize all sorts of things
             # we wouldn't otherwise be able to
