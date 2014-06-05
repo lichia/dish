@@ -116,7 +116,7 @@ class Pipeline(object):
         return num_engines, cores_per_engine, mem_per_engine
 
     @contextmanager
-    def group(self, cores=1, mem=None, max=None):
+    def group(self, cores=1, mem="0.1", max=None):
         """Context manager for "grouping" a set of pipeline operations. A
         group of operations is run on the same ipython cluster and has
         it's resources specified in the group as opposed to in each
@@ -250,7 +250,7 @@ class Pipeline(object):
                         (self.listen_ip for j in self.jobs),
                         (self.listen_port for j in self.jobs))
 
-    def map(self, f, cores=1, mem=None, max=None):
+    def map(self, f, cores=1, mem="0.1", max=None):
         """Map the function ``f`` over all of the ``jobs`` in this
         pipeline. ``f`` must be a function of two arguments, the job
         and a logger. It should modify the job it is passed, which
