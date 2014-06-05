@@ -230,10 +230,11 @@ class Pipeline(object):
         self.jobs = to_run
         try:
             yield
-            for job in self.jobs:
-                fs.liftdir(job["tmpdir"], job["workdir"])
         finally:
             for job in self.jobs:
+                if all((os.path.exists(target)
+                        for target in canonical_targets)):
+                    fs.liftdir(job["tmpdir"], job["workdir"])
                 shutil.rmtree(job["tmpdir"])
             self.jobs = dont_run + self.jobs
 
