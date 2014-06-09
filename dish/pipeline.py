@@ -230,11 +230,15 @@ class Pipeline(object):
         self.jobs = to_run
         try:
             yield
-            for job in self.jobs:
-                fs.liftdir(job["tmpdir"], job["workdir"])
         finally:
             for job in self.jobs:
+                if not job.get("_errored"):
+                    fs.liftdir(job["tmpdir"], job["workdir"])
+                else:
+                    del job["_errored"]
+            for job in self.jobs:
                 shutil.rmtree(job["tmpdir"])
+                del job["tmpdir"]
             self.jobs = dont_run + self.jobs
 
     def localmap(self, f):

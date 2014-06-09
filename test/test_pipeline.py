@@ -178,6 +178,18 @@ class TestPipeline(object):
         for job in self.p.jobs:
             assert not os.path.exists(os.path.join(job["workdir"], "A"))
 
+    def test_transaction_handles_partial_failiures(self):
+        """Transactions should be able to successfully copy the output of jobs
+        that succeeded while skipping those that failed.
+        """
+        with open(os.path.join(self.p.jobs[0]["workdir"], "1"), "w") as f:
+            f.write("hello")
+        with assert_raises(CompositeError):
+            with self.p.transaction("2"):
+                self.p.run("cat {workdir}/1 > {tmpdir}/2")
+        assert not os.path.exists(os.path.join(self.p.jobs[1]["workdir"], "2"))
+        assert os.path.exists(os.path.join(self.p.jobs[0]["workdir"], "2"))
+
     def test_stdout_is_logged(self):
         """p.run should log stdout of the command."""
         self.p.run("echo testing123")
