@@ -206,9 +206,7 @@ class TestPipeline(object):
         """Transaction targets should not be created in the workdir when paths
         are relative.
         """
-        with assert_raises(IndexError):
-            # should really be CompositeError but IPython
-            # CompositeError constructor is broken
+        with assert_raises(CompositeError):
             with self.p.transaction("A"):
                 self.p.run("touch B")
                 self.p.run("i_dont_exist")  # so that transaction fails

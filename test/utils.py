@@ -2,8 +2,10 @@
 
 from mock import MagicMock
 from contextlib import contextmanager
-from IPython.parallel.error import CompositeError
+from IPython.parallel.error import CompositeError, wrap_exception, \
+    unwrap_exception
 from time import time
+
 
 class MockView(MagicMock):
     """A mock IPython cluster view"""
@@ -15,7 +17,8 @@ class MockView(MagicMock):
             try:
                 res.append(f(*group))
             except Exception as e:
-                exceptions.append(e)
+                # lol
+                exceptions.append(unwrap_exception(wrap_exception()))
         if exceptions:
             raise CompositeError("Mock Composite error", exceptions)
         else:
