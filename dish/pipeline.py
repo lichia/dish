@@ -159,6 +159,39 @@ class Pipeline(object):
             except StopIteration:
                 pass
 
+    def _transaction_filter(self, targets):
+        """Filter the `jobs` appropriately based on whether `targets` is a
+        function, str, or list of str"""
+        # TODO there has got to be a better way to do this -____-
+        to_run = []
+        dont_run = []
+        if callable(targets):
+            f = targets
+            for job in self.jobs:
+                if f(job):
+                    dont_run.append(job)
+                else:
+                    to_run.append(job)
+            return to_run, dont_run
+        elif isinstance(targets, str):
+            targets = [targets]
+        elif not isinstance(targets, list):
+            TypeError("transaction targets must be list, str, or callable")
+        for job in self.jobs:
+            canonical_targets = fs.canonicalize(job, targets)
+            if all((os.path.exists(target)
+                    for target in canonical_targets)):
+                info = ("Skipping transaction for job {} targets {} "
+                        "already present")
+                with self.handler.applicationbound():
+                    self.logger.info(info.format(job["description"],
+                                                 canonical_targets))
+                dont_run.append(job)
+            else:
+                # targets not present for this job
+                to_run.append(job)
+        return to_run, dont_run
+
     @contextmanager
     def transaction(self, targets):
         """Do some work "transacationally", in the sense that nothing done
@@ -208,23 +241,7 @@ class Pipeline(object):
         that must exist in order for the transaction to be skipped.
 
         """
-        if type(targets) is not list:
-            targets = [targets]
-        to_run = []
-        dont_run = []
-        for job in self.jobs:
-            canonical_targets = fs.canonicalize(job, targets)
-            if all((os.path.exists(target)
-                    for target in canonical_targets)):
-                info = ("Skipping transaction for job {} targets {} "
-                        "already present")
-                with self.handler.applicationbound():
-                    self.logger.info(info.format(job["description"],
-                                                 canonical_targets))
-                dont_run.append(job)
-            else:
-                # targets not present for this job
-                to_run.append(job)
+        to_run, dont_run = self._transaction_filter(targets)
         for job in to_run:
             job["tmpdir"] = tempfile.mkdtemp(dir=job["workdir"])
         self.jobs = to_run

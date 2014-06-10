@@ -72,3 +72,14 @@ class TestTransaction(PipelineTest):
                 self.p.run("i_dont_exist")  # so that transaction fails
         for job in self.p.jobs:
             assert not os.path.exists(os.path.join(job["workdir"], "B"))
+
+    def test_transaction_with_function(self):
+        self.p.jobs[0]["key"] = True
+        self.p.jobs[1]["key"] = False
+
+        def f(job):
+            return job["key"]
+        with self.p.transaction(f):
+            self.p.run("touch out")
+        assert not os.path.exists(os.path.join(self.p.jobs[0]["workdir"], "out"))
+        assert os.path.exists(os.path.join(self.p.jobs[1]["workdir"], "out"))
