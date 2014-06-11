@@ -29,14 +29,9 @@ def logging_wrapper(job, f, ip, port):
             f(job, logger=logger)
         except:
             if job.get("tmpdir"):
-                # this sillyness is another sign that job should
-                # probably be a class
-                logger.exception("Task failed with traceback:")
-                job["_error"] = wrap_exception()
-                return job
-            else:
-                logger.exception("Task failed with traceback:")
-                raise
+                open(os.path.join(job["tmpdir"], ".error"), 'a').close()
+            logger.exception("Task failed with traceback:")
+            raise
         return job
 
 

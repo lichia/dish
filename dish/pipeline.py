@@ -246,20 +246,15 @@ class Pipeline(object):
         for job in to_run:
             job["tmpdir"] = tempfile.mkdtemp(dir=job["workdir"])
         self.jobs = to_run
-        yield
-        exceptions = []
-        for job in self.jobs:
-            if not job.get("_error"):
-                fs.liftdir(job["tmpdir"], job["workdir"])
-            else:
-                exceptions.append(unwrap_exception(job["_error"]))
-                del job["_error"]
-        for job in self.jobs:
-            shutil.rmtree(job["tmpdir"])
-            del job["tmpdir"]
-        self.jobs = dont_run + self.jobs
-        if exceptions:
-            raise CompositeError("{} errors during transaction", exceptions)
+        try:
+            yield
+        finally:
+            for job in self.jobs:
+                if not os.path.exists(os.path.join(job["tmpdir"], ".error")):
+                    fs.liftdir(job["tmpdir"], job["workdir"])
+                shutil.rmtree(job["tmpdir"])
+                del job["tmpdir"]
+            self.jobs = dont_run + self.jobs
 
     def localmap(self, f):
         """Just like ``map``, but work locally rather than launching an ipython
