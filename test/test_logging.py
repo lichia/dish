@@ -21,8 +21,10 @@ class TestLogging(PipelineTest):
         for job in self.p.jobs:
             job_log = open(os.path.join(job["workdir"],
                                         job["description"]+".log")).read()
-            assert job["description"]+"loggingtest" in job_log
-            assert job["description"]+"loggingtest" in pipeline_log
+            assert_eventually_equal(job["description"]+"loggingtest" in job_log,
+                                    True)
+            assert_eventually_equal(job["description"]+"loggingtest" in pipeline_log,
+                                    True)
 
     def test_stdout_is_logged(self):
         """p.run should log stdout of the command."""
