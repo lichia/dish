@@ -109,6 +109,9 @@ class Pipeline(object):
                              " are available.".format(cores_per_engine,
                                                       self.total_cores))
         num_engines = self.total_cores // cores_per_engine
+        if len(self.jobs) < num_engines:
+            # we don't even need this many engines
+            num_engines = self.jobs
         if max_engines:
             num_engines = min(num_engines, max_engines)
         # TODO in the future, should maybe validate that requested
