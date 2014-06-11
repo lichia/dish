@@ -27,7 +27,7 @@ def logging_wrapper(job, f, ip, port):
             else:
                 os.chdir(job["workdir"])
             f(job, logger=logger)
-        except Exception as e:
+        except:
             if job.get("tmpdir"):
                 # this sillyness is another sign that job should
                 # probably be a class

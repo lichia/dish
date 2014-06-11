@@ -19,7 +19,7 @@ class MockView(MagicMock):
             group = loads(dumps(group))
             try:
                 res.append(f(*group))
-            except Exception as e:
+            except:
                 # lol
                 exceptions.append(unwrap_exception(wrap_exception()))
         if exceptions:
