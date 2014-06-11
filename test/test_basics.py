@@ -61,3 +61,22 @@ class TestBasics(PipelineTest):
         self.p.run("touch test")
         for job in self.p.jobs:
             assert os.path.exists(os.path.join(job["workdir"], "test"))
+
+    def test_retries(self):
+        """Passing a high number for retries should enable fault tolerance."""
+        # TODO this still fails in test due to the fact that IPython
+        # will not resubmit a task to the same engine, and we only
+        # have one engine in local testing. ref
+        # https://github.com/ipython/ipython/issues/5977
+
+        self.p.retries = 2
+
+        def fails_at_first(job, logger):
+            if not os.path.exists(os.path.join(job["workdir"], "here")):
+                open(os.path.join(job["workdir"], "here"), "a").close()
+                raise RuntimeError("fail!")
+            else:
+                job["worked"] = True
+        self.p.map(fails_at_first)
+        for job in self.p.jobs:
+            assert job["worked"]

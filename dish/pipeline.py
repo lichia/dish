@@ -24,7 +24,7 @@ class Pipeline(object):
     """
 
     def __init__(self, workdir, jobs, total_cores, scheduler=None, queue=None,
-                 local=False):
+                 local=False, retries=None):
         """Initialize a pipeline.
 
         :param workdir: Name of a directory to use for scratch space
@@ -59,6 +59,7 @@ class Pipeline(object):
         self.scheduler = scheduler
         self.queue = queue
         self.local = local
+        self.retries = retries
         # setup default cluster_view
         self._cluster_view = cluster_view
 
@@ -141,7 +142,8 @@ class Pipeline(object):
         cm = self._cluster_view(self.scheduler, self.queue,
                                 engines, profile=self.ipythondir,
                                 cores_per_job=cores,
-                                extra_params=extra_params)
+                                extra_params=extra_params,
+                                retries=self.retries)
         view = cm.gen.next()
 
         @contextmanager
@@ -309,7 +311,8 @@ class Pipeline(object):
         with self._cluster_view(self.scheduler, self.queue,
                                 engines, profile=self.ipythondir,
                                 cores_per_job=cores,
-                                extra_params=extra_params) as view:
+                                extra_params=extra_params,
+                                retries=self.retries) as view:
             # using cloudpickle allows us to serialize all sorts of things
             # we wouldn't otherwise be able to
             dview = view.client.direct_view()
