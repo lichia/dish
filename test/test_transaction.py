@@ -3,6 +3,7 @@ from IPython.parallel.error import CompositeError
 import os
 
 from nose.tools import assert_raises
+import copy
 
 from .test_pipeline import PipelineTest
 
@@ -10,10 +11,11 @@ from .test_pipeline import PipelineTest
 class TestTransaction(PipelineTest):
     def test_transaction_works(self):
         """Test that running commands transactionally works as expected."""
-        old_jobs = self.p.jobs
+        # import ipdb; ipdb.set_trace()
+        old_jobs = copy.deepcopy(self.p.jobs)
         with self.p.transaction("{workdir}/A"):
             self.p.run("touch {tmpdir}/A")
-        new_jobs = self.p.jobs
+        new_jobs = copy.deepcopy(self.p.jobs)
         assert new_jobs == old_jobs
         for job in self.p.jobs:
             assert os.path.exists(os.path.join(job["workdir"], "A"))
