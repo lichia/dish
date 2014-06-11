@@ -12,6 +12,7 @@ from dish import fs
 from dish.factories import cmdrunner
 
 from IPython.utils import localinterfaces
+from IPython.parallel.error import unwrap_exception, CompositeError
 
 from random import randint
 from contextlib import contextmanager
@@ -245,18 +246,20 @@ class Pipeline(object):
         for job in to_run:
             job["tmpdir"] = tempfile.mkdtemp(dir=job["workdir"])
         self.jobs = to_run
-        try:
-            yield
-        finally:
-            for job in self.jobs:
-                if not job.get("_errored"):
-                    fs.liftdir(job["tmpdir"], job["workdir"])
-                else:
-                    del job["_errored"]
-            for job in self.jobs:
-                shutil.rmtree(job["tmpdir"])
-                del job["tmpdir"]
-            self.jobs = dont_run + self.jobs
+        yield
+        exceptions = []
+        for job in self.jobs:
+            if not job.get("_error"):
+                fs.liftdir(job["tmpdir"], job["workdir"])
+            else:
+                exceptions.append(unwrap_exception(job["_error"]))
+                del job["_error"]
+        for job in self.jobs:
+            shutil.rmtree(job["tmpdir"])
+            del job["tmpdir"]
+        self.jobs = dont_run + self.jobs
+        if exceptions:
+            raise CompositeError("{} errors during transaction", exceptions)
 
     def localmap(self, f):
         """Just like ``map``, but work locally rather than launching an ipython

@@ -3,6 +3,7 @@ from dish.logging.zmqextras import ZeroMQPushHandler
 import os
 
 from IPython.utils.pickleutil import can_map
+from IPython.parallel.error import wrap_exception
 from types import FunctionType
 
 
@@ -26,13 +27,16 @@ def logging_wrapper(job, f, ip, port):
             else:
                 os.chdir(job["workdir"])
             f(job, logger=logger)
-        except:
+        except Exception as e:
             if job.get("tmpdir"):
                 # this sillyness is another sign that job should
                 # probably be a class
-                job["_errored"] = True
-            logger.exception("Task failed with traceback:")
-            raise
+                logger.exception("Task failed with traceback:")
+                job["_error"] = wrap_exception()
+                return job
+            else:
+                logger.exception("Task failed with traceback:")
+                raise
         return job
 
 
