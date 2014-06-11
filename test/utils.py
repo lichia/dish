@@ -1,6 +1,6 @@
 """Misc testing utils"""
 
-from mock import MagicMock
+from mock import Mock
 from contextlib import contextmanager
 from IPython.parallel.error import CompositeError, wrap_exception, \
     unwrap_exception
@@ -8,8 +8,15 @@ from time import time
 from cloud.serialization.cloudpickle import dumps, loads
 
 
-class MockView(MagicMock):
+class MockView(Mock):
     """A mock IPython cluster view"""
+
+    def __init__(self, *args, **kwargs):
+        Mock.__init__(self)
+        if kwargs.get("retries"):
+            self.tries = kwargs["retries"]
+        else:
+            self.tries = 1
 
     def map_sync(self, f, *args):
         res = []
@@ -17,11 +24,18 @@ class MockView(MagicMock):
         for group in zip(*args):
             # simulate network roundtrip
             group = loads(dumps(group))
-            try:
-                res.append(f(*group))
-            except:
-                # lol
-                exceptions.append(unwrap_exception(wrap_exception()))
+            tries = 0
+            while tries < self.tries:
+                tries += 1
+                try:
+                    res.append(f(*group))
+                except:
+                    if tries < self.tries:
+                        pass
+                    else:
+                        # lol
+                        exceptions.append(unwrap_exception(wrap_exception()))
+                        break
         if exceptions:
             raise CompositeError("Mock Composite error", exceptions)
         else:
@@ -30,7 +44,7 @@ class MockView(MagicMock):
 
 @contextmanager
 def mock_view(*args, **kwargs):
-    yield MockView()
+    yield MockView(*args, **kwargs)
 
 
 def assert_eventually_equal(*args, **kwargs):
