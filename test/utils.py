@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from IPython.parallel.error import CompositeError, wrap_exception, \
     unwrap_exception
 from time import time
+from cloud.serialization.cloudpickle import dumps, loads
 
 
 class MockView(MagicMock):
@@ -14,6 +15,8 @@ class MockView(MagicMock):
         res = []
         exceptions = []
         for group in zip(*args):
+            # simulate network roundtrip
+            group = loads(dumps(group))
             try:
                 res.append(f(*group))
             except Exception as e:
